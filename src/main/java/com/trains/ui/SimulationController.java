@@ -240,25 +240,17 @@ public class SimulationController {
     /**
      * @return the total cargo units waiting across every station
      */
-    public int getWaitingUnits() {
-        int waiting = 0;
-        for (Node node : sim.getNetwork().getNodes().values()) {
-            if (node instanceof Station station) {
-                waiting += station.getCargoHold().getUsedUnits();
-            }
-        }
-        return waiting;
+        public int getWaitingUnits() {
+        return stations().stream()
+                .collect(Collectors.summingInt(station -> station.getCargoHold().getUsedUnits()));
     }
 
     /**
      * @return the total cargo units currently aboard vehicles
      */
-    public int getOnboardUnits() {
-        int onboard = 0;
-        for (Vehicle vehicle : sim.getVehicles()) {
-            onboard += vehicle.getCargoHold().getUsedUnits();
-        }
-        return onboard;
+        public int getOnboardUnits() {
+        return sim.getVehicles().stream()
+                .collect(Collectors.summingInt(vehicle -> vehicle.getCargoHold().getUsedUnits()));
     }
 
     private void pulse(long now) {
