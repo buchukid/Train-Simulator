@@ -33,11 +33,8 @@ public final class Route {
         this.origin = origin;
         this.destination = destination;
         this.segments = segments;
-        double length = 0;
-        for (PathwaySegment segment : segments) {
-            length += segment.getLength();
-        }
-        this.totalLength = length;
+
+        this.totalLength = segments.stream().mapToDouble(PathwaySegment::getLength).sum();
     }
 
 

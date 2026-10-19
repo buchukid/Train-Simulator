@@ -65,13 +65,9 @@ public class Node {
      * @return true if the calling node is connected to the supplied, false otherwise
      */
     public boolean isConnectedTo(Node other) {
-        for (PathwaySegment segment : connections) {
-            if (segment.opposite(this) == other) {
-                return true;
-            }
-        }
-        return false;
-    }
+    return connections.stream()
+            .anyMatch(segment -> segment.opposite(this) == other);
+}
 
 
     @Override
