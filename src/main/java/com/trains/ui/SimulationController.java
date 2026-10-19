@@ -1,5 +1,6 @@
 package com.trains.ui;
 
+import java.util.stream.Collectors;
 import com.trains.cargo.Cargo;
 import com.trains.cargo.CargoTransfer;
 import com.trains.network.Node;
@@ -435,6 +436,7 @@ public class SimulationController {
 
     private List<Candidate> scoreCandidates(Node origin) {
         List<Candidate> candidates = new ArrayList<>();
+        Map<GridPos, Integer> demand = demandByDestination(origin);
 
         for (Station station : stations()) {
             if (station == origin) {
@@ -453,7 +455,7 @@ public class SimulationController {
             candidates.add(new Candidate(
                     station,
                     route,
-                    demandFor(origin, station),
+                    demand.getOrDefault(station.getPos(), 0),
                     station.getCargoHold().getUsedUnits(),
                     staleness,
                     staleness > STARVATION_SECONDS));
@@ -462,25 +464,27 @@ public class SimulationController {
         return candidates;
     }
 
-    /**
-     * How much cargo waiting where the vehicle is now is trying to reach the given station.
+        /**
+     * How much cargo waiting where the vehicle is now is trying to reach each other station.
      * <p>
      *     This is the signal that actually converts into deliveries: boardPassengers only lets cargo
      *     on if Itinerary.willVisit says the route reaches its destination, so those passengers
      *     cannot move at all until a train is dispatched their way.
      * </p>
+     * <p>
+     *     Built once per redispatch with groupingBy, so the platform is scanned a single time
+     *     instead of once for every candidate station.
+     * </p>
+     * @return destination position to total units waiting for it, empty if the origin is not a station
      */
-    private int demandFor(Node origin, Station destination) {
+    private Map<GridPos, Integer> demandByDestination(Node origin) {
         if (!(origin instanceof Station originStation)) {
-            return 0;
+            return Map.of();
         }
-        int demand = 0;
-        for (Cargo cargo : originStation.getCargoHold().getContents()) {
-            if (cargo.getDestination().equals(destination.getPos())) {
-                demand += cargo.getUnits();
-            }
-        }
-        return demand;
+        return originStation.getCargoHold().getContents().stream()
+                .collect(Collectors.groupingBy(
+                        Cargo::getDestination,
+                        Collectors.summingInt(Cargo::getUnits)));
     }
 
     private List<Station> stations() {
