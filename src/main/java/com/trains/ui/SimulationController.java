@@ -479,14 +479,11 @@ public class SimulationController {
                         Collectors.summingInt(Cargo::getUnits)));
     }
 
-    private List<Station> stations() {
-        List<Station> stations = new ArrayList<>();
-        for (Node node : sim.getNetwork().getNodes().values()) {
-            if (node instanceof Station station) {
-                stations.add(station);
-            }
-        }
-        return stations;
+       private List<Station> stations() {
+        return sim.getNetwork().getNodes().values().stream()
+                .filter(Station.class::isInstance)
+                .map(Station.class::cast)
+                .collect(Collectors.toList());
     }
 
     /**
