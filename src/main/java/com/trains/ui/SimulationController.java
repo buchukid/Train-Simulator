@@ -489,14 +489,10 @@ public class SimulationController {
     /**
      * @return the stations that have at least one pathway, so are worth considering at all
      */
-    private List<Station> connectedStations() {
-        List<Station> stations = new ArrayList<>();
-        for (Station station : stations()) {
-            if (!station.getConnections().isEmpty()) {
-                stations.add(station);
-            }
-        }
-        return stations;
+       private List<Station> connectedStations() {
+        return stations().stream()
+                .filter(station -> !station.getConnections().isEmpty())
+                .collect(Collectors.toList());
     }
 
     public boolean spawnVehicle() {
