@@ -5,6 +5,7 @@ import java.util.Objects;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import java.util.stream.Collectors;
 
 public final class CargoSpawner {
     private final Network network;
@@ -60,15 +61,10 @@ public final class CargoSpawner {
      */
 
     private List<Station> getStations(){
-        List<Station> stations = new ArrayList<>();
-
-        for(Node node: network.getNodes().values()){
-            if (node instanceof Station station){
-                stations.add(station);
-            }
-        }
-
-        return stations;
+        return network.getNodes().values().stream()
+                .filter(Station.class::isInstance)
+                .map(Station.class::cast)
+                .collect(Collectors.toList());
     }
 
     /**

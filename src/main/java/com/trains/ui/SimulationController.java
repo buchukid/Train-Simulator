@@ -1,5 +1,6 @@
 package com.trains.ui;
 
+import java.util.stream.Collectors;
 import com.trains.cargo.Cargo;
 import com.trains.cargo.CargoTransfer;
 import com.trains.network.Node;
@@ -239,25 +240,17 @@ public class SimulationController {
     /**
      * @return the total cargo units waiting across every station
      */
-    public int getWaitingUnits() {
-        int waiting = 0;
-        for (Node node : sim.getNetwork().getNodes().values()) {
-            if (node instanceof Station station) {
-                waiting += station.getCargoHold().getUsedUnits();
-            }
-        }
-        return waiting;
+        public int getWaitingUnits() {
+        return stations().stream()
+                .collect(Collectors.summingInt(station -> station.getCargoHold().getUsedUnits()));
     }
 
     /**
      * @return the total cargo units currently aboard vehicles
      */
-    public int getOnboardUnits() {
-        int onboard = 0;
-        for (Vehicle vehicle : sim.getVehicles()) {
-            onboard += vehicle.getCargoHold().getUsedUnits();
-        }
-        return onboard;
+        public int getOnboardUnits() {
+        return sim.getVehicles().stream()
+                .collect(Collectors.summingInt(vehicle -> vehicle.getCargoHold().getUsedUnits()));
     }
 
     private void pulse(long now) {
@@ -435,6 +428,7 @@ public class SimulationController {
 
     private List<Candidate> scoreCandidates(Node origin) {
         List<Candidate> candidates = new ArrayList<>();
+        Map<GridPos, Integer> demand = demandByDestination(origin);
 
         for (Station station : stations()) {
             if (station == origin) {
@@ -453,7 +447,7 @@ public class SimulationController {
             candidates.add(new Candidate(
                     station,
                     route,
-                    demandFor(origin, station),
+                    demand.getOrDefault(station.getPos(), 0),
                     station.getCargoHold().getUsedUnits(),
                     staleness,
                     staleness > STARVATION_SECONDS));
@@ -462,48 +456,43 @@ public class SimulationController {
         return candidates;
     }
 
-    /**
-     * How much cargo waiting where the vehicle is now is trying to reach the given station.
+        /**
+     * How much cargo waiting where the vehicle is now is trying to reach each other station.
      * <p>
      *     This is the signal that actually converts into deliveries: boardPassengers only lets cargo
      *     on if Itinerary.willVisit says the route reaches its destination, so those passengers
      *     cannot move at all until a train is dispatched their way.
      * </p>
+     * <p>
+     *     Built once per redispatch with groupingBy, so the platform is scanned a single time
+     *     instead of once for every candidate station.
+     * </p>
+     * @return destination position to total units waiting for it, empty if the origin is not a station
      */
-    private int demandFor(Node origin, Station destination) {
+    private Map<GridPos, Integer> demandByDestination(Node origin) {
         if (!(origin instanceof Station originStation)) {
-            return 0;
+            return Map.of();
         }
-        int demand = 0;
-        for (Cargo cargo : originStation.getCargoHold().getContents()) {
-            if (cargo.getDestination().equals(destination.getPos())) {
-                demand += cargo.getUnits();
-            }
-        }
-        return demand;
+        return originStation.getCargoHold().getContents().stream()
+                .collect(Collectors.groupingBy(
+                        Cargo::getDestination,
+                        Collectors.summingInt(Cargo::getUnits)));
     }
 
-    private List<Station> stations() {
-        List<Station> stations = new ArrayList<>();
-        for (Node node : sim.getNetwork().getNodes().values()) {
-            if (node instanceof Station station) {
-                stations.add(station);
-            }
-        }
-        return stations;
+       private List<Station> stations() {
+        return sim.getNetwork().getNodes().values().stream()
+                .filter(Station.class::isInstance)
+                .map(Station.class::cast)
+                .collect(Collectors.toList());
     }
 
     /**
      * @return the stations that have at least one pathway, so are worth considering at all
      */
-    private List<Station> connectedStations() {
-        List<Station> stations = new ArrayList<>();
-        for (Station station : stations()) {
-            if (!station.getConnections().isEmpty()) {
-                stations.add(station);
-            }
-        }
-        return stations;
+       private List<Station> connectedStations() {
+        return stations().stream()
+                .filter(station -> !station.getConnections().isEmpty())
+                .collect(Collectors.toList());
     }
 
     public boolean spawnVehicle() {
