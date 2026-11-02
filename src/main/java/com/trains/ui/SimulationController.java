@@ -427,33 +427,32 @@ public class SimulationController {
     }
 
     private List<Candidate> scoreCandidates(Node origin) {
-        List<Candidate> candidates = new ArrayList<>();
         Map<GridPos, Integer> demand = demandByDestination(origin);
 
-        for (Station station : stations()) {
-            if (station == origin) {
-                continue;
-            }
-            /*
-             * Routing every candidate up front both supplies the length for the tiebreak and drops
-             * anything in another component, which is what a partially connected network needs.
-             * A handful of A* runs once per dwell is not worth optimising.
-             */
-            Route route = router.findRoute(origin, station);
-            if (route == null) {
-                continue;
-            }
-            double staleness = elapsedSeconds - lastServed.getOrDefault(station.getPos(), 0.0);
-            candidates.add(new Candidate(
-                    station,
-                    route,
-                    demand.getOrDefault(station.getPos(), 0),
-                    station.getCargoHold().getUsedUnits(),
-                    staleness,
-                    staleness > STARVATION_SECONDS));
-        }
-
-        return candidates;
+        /*
+         * Each A* search is independent: findRoute only builds its own local maps and queue and
+         * only reads the network, so the searches can safely run on separate threads. The stream
+         * collects the results itself rather than threads adding to a shared ArrayList, and it has
+         * to be a mutable ArrayList because redispatch shuffles and sorts it afterwards.
+         */
+        return stations().parallelStream()
+                .filter(station -> station != origin)
+                .map(station -> {
+                    Route route = router.findRoute(origin, station);
+                    if (route == null) {
+                        return null; // unreachable, e.g. in another part of the network
+                    }
+                    double staleness = elapsedSeconds - lastServed.getOrDefault(station.getPos(), 0.0);
+                    return new Candidate(
+                            station,
+                            route,
+                            demand.getOrDefault(station.getPos(), 0),
+                            station.getCargoHold().getUsedUnits(),
+                            staleness,
+                            staleness > STARVATION_SECONDS);
+                })
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(ArrayList::new));
     }
 
         /**
