@@ -19,7 +19,7 @@ public class App {
 
 		JFrame frame = new JFrame("Train Simulator");
 		frame.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
-		frame.setSize(800, 800);
+		frame.setSize(1400, 900);
 		frame.setLocationRelativeTo(null);
 		frame.setContentPane(new GUIMainMenu(frame));
 		frame.setVisible(true);
