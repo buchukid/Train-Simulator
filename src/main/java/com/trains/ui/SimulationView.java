@@ -6,6 +6,11 @@ import com.trains.network.Node;
 import com.trains.network.PathwaySegment;
 import com.trains.network.Station;
 import com.trains.sim.Simulation;
+import com.trains.ui.theme.BulletTheme;
+import com.trains.ui.theme.MetroTheme;
+import com.trains.ui.theme.ModernTheme;
+import com.trains.ui.theme.SteamTheme;
+import com.trains.ui.theme.Theme;
 import com.trains.utils.GridPos;
 import com.trains.utils.Point2D;
 import com.trains.utils.lang.I18N;
@@ -13,10 +18,13 @@ import com.trains.vehicles.Vehicle;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
 import java.awt.geom.AffineTransform;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -51,16 +59,18 @@ public final class SimulationView extends JPanel {
 	 */
 	private static final double MIN_GRID_PIXELS = 14.0;
 
-	private static final Color BACKGROUND = Color.decode("#1b2130");
-	private static final Color GRID = Color.decode("#252d3f");
-	private static final Color PATHWAY = Color.decode("#7d8799");
 	private static final Color NODE = Color.decode("#5c6b82");
-	private static final Color STATION = Color.decode("#e8b339");
-	private static final Color STATION_FULL = Color.decode("#d95f5f");
-	private static final Color VEHICLE_MOVING = Color.decode("#4bab6a");
-	private static final Color VEHICLE_STOPPED = Color.decode("#c9d1d9");
-	private static final Color TEXT = Color.decode("#e6edf3");
-	private static final Color TEXT_DIM = Color.decode("#9aa5b1");
+
+	/**
+	 * The skins the view can switch between, pressing T moves to the next one.
+	 * <p>
+	 *     SimulationView only works out where things go, the current Theme decides how they look.
+	 * </p>
+	 */
+	private final List<Theme> themes = List.of(
+			new ModernTheme(), new SteamTheme(), new MetroTheme(), new BulletTheme());
+	private int themeIndex = 0;
+	private Theme theme = themes.get(themeIndex);
 
 	private final double worldSize;
 	private Simulation simulation;
@@ -101,9 +111,34 @@ public final class SimulationView extends JPanel {
 		}
 
 		this.worldSize = worldSize;
-		setBackground(BACKGROUND);
+		setBackground(theme.getBackground());
 		setOpaque(true);
 		installPanAndZoom();
+		installThemeKey();
+	}
+
+	/**
+	 * Switches to the next theme, wrapping back to the first after the last.
+	 */
+	public void nextTheme() {
+		themeIndex = (themeIndex + 1) % themes.size();
+		theme = themes.get(themeIndex);
+		setBackground(theme.getBackground());
+		repaint();
+	}
+
+	public Theme getTheme() {
+		return theme;
+	}
+
+	private void installThemeKey() {
+		getInputMap(WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke(KeyEvent.VK_T, 0), "nextTheme");
+		getActionMap().put("nextTheme", new AbstractAction() {
+			@Override
+			public void actionPerformed(ActionEvent event) {
+				nextTheme();
+			}
+		});
 	}
 
 	private static void fillOval(Graphics2D gc, double screenX, double screenY, double radius) {
@@ -232,6 +267,9 @@ public final class SimulationView extends JPanel {
 			drawVehicle(gc, vehicle);
 		}
 
+		gc.setColor(theme.getTextDim());
+		fillTextLeft(gc, "Theme: " + theme.getName() + "  (press T to change)", 12, height - 12);
+
 		gc.dispose();
 	}
 
@@ -242,7 +280,7 @@ public final class SimulationView extends JPanel {
 			spacing *= 2;
 		}
 
-		gc.setColor(GRID);
+		gc.setColor(theme.getGrid());
 		gc.setStroke(new BasicStroke(1f));
 
 		double firstX = Math.floor(offsetX / spacing) * spacing;
@@ -259,16 +297,13 @@ public final class SimulationView extends JPanel {
 	}
 
 	private void drawPathways(Graphics2D gc, Network network) {
-		gc.setColor(PATHWAY);
-		gc.setStroke(new BasicStroke((float) Math.max(2.0, scale * 0.45),
-				BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-
 		for (PathwaySegment segment : network.getPathways()) {
 			GridPos start = segment.getStart().getPos();
 			GridPos end = segment.getEnd().getPos();
-			gc.drawLine(
-					(int) Math.round(toScreenX(start.x())), (int) Math.round(toScreenY(start.y())),
-					(int) Math.round(toScreenX(end.x())), (int) Math.round(toScreenY(end.y())));
+			theme.drawTrack(gc,
+					toScreenX(start.x()), toScreenY(start.y()),
+					toScreenX(end.x()), toScreenY(end.y()),
+					scale);
 		}
 	}
 
@@ -289,34 +324,34 @@ public final class SimulationView extends JPanel {
 
 	private void drawStation(Graphics2D gc, Station station, double screenX, double screenY) {
 		CargoHold hold = station.getCargoHold();
-		double size = Math.max(12.0, scale * 2.0);
-		double corner = size / 3;
+		double size = stationSize();
 
-		gc.setColor(hold.getRemainingCapacity() <= 0 ? STATION_FULL : STATION);
-		gc.fillRoundRect(
-				(int) Math.round(screenX - size / 2),
-				(int) Math.round(screenY - size / 2),
-				(int) Math.round(size),
-				(int) Math.round(size),
-				(int) Math.round(corner),
-				(int) Math.round(corner));
+		theme.drawStation(gc, screenX, screenY, size, hold.getRemainingCapacity() <= 0);
 
 		if (station.getName() != null) {
-			gc.setColor(TEXT);
-			fillTextCentered(gc, station.getName(), screenX, screenY - size / 2 - 6);
+			gc.setColor(theme.getText());
+			fillTextCentered(gc, station.getName(), screenX, screenY - size / 2 - 10);
 		}
 
-		gc.setColor(TEXT_DIM);
+		gc.setColor(theme.getTextDim());
 		fillTextCentered(gc, hold.getUsedUnits() + "/" + hold.getCapacity(),
-				screenX, screenY + size / 2 + 14);
+				screenX, screenY + size / 2 + 16);
+	}
+
+	private double stationSize() {
+		return Math.max(34.0, scale * 3.5);
+	}
+
+	private double trainLength() {
+		return Math.max(40.0, scale * 4.0);
 	}
 
 	private void drawVehicle(Graphics2D gc, Vehicle vehicle) {
 		Point2D pos = vehicle.getPos();
 		double screenX = toScreenX(pos.x);
 		double screenY = toScreenY(pos.y);
-		double length = Math.max(14.0, scale * 2.4);
-		double width = Math.max(7.0, scale * 1.1);
+		double length = trainLength();
+		double width = length * 0.45;
 
 		double angle = 0;
 		// getTargetNode() goes through Itinerary.getCurrentSegment(), which throws once the route is done
@@ -329,14 +364,7 @@ public final class SimulationView extends JPanel {
 		AffineTransform previous = gc.getTransform();
 		gc.translate(screenX, screenY);
 		gc.rotate(Math.toRadians(angle));
-		gc.setColor(vehicle.isStopped() ? VEHICLE_STOPPED : VEHICLE_MOVING);
-		gc.fillRoundRect(
-				(int) Math.round(-length / 2),
-				(int) Math.round(-width / 2),
-				(int) Math.round(length),
-				(int) Math.round(width),
-				(int) Math.round(width / 2),
-				(int) Math.round(width / 2));
+		theme.drawTrain(gc, length, width, vehicle.isStopped());
 		gc.setTransform(previous);
 
 		// only label a train that is actually carrying something, empty labels just collide
@@ -347,7 +375,7 @@ public final class SimulationView extends JPanel {
 //			 * Beside the train rather than above it. A stopped train sits exactly on its station, so
 //			 * a label above would land on top of the station name.
 //			 */
-			gc.setColor(TEXT_DIM);
+			gc.setColor(theme.getTextDim());
 			fillTextLeft(gc, hold.getUsedUnits() + "/" + hold.getCapacity(),
 					screenX + length / 2 + 6, screenY + 4);
 		}
@@ -366,7 +394,7 @@ public final class SimulationView extends JPanel {
 		if (simulation == null) { return null; }
 		for (Vehicle vehicle : simulation.getVehicles()) {
 			Point2D pos = vehicle.getPos();
-			double half = Math.max(8.0, Math.max(14.0, scale * 2.5) / 2);
+			double half = Math.max(8.0, trainLength() / 2);
 			if (isWithinObjectHitbox(screenX, screenY, toScreenX(pos.x), toScreenY(pos.y), half)) {
 				return vehicle;
 			}
@@ -374,7 +402,7 @@ public final class SimulationView extends JPanel {
 
 		for (Node node : simulation.getNetwork().getNodes().values()) {
 			double half = node instanceof Station
-					? Math.max(8.0, Math.max(12.0, scale * 2.0) / 2)
+					? Math.max(8.0, stationSize() / 2)
 					: Math.max(8.0, Math.max(5.0, scale * 0.5));
 			if (isWithinObjectHitbox(screenX, screenY, toScreenX(node.getX()), toScreenY(node.getY()), half)) {
 				return node;
